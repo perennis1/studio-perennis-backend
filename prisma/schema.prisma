@@ -1,17 +1,21 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+// Prisma schema file for Studio Perennis backend
 
 generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  name      String?  // Add this line (? makes it optional)
-  createdAt DateTime @default(now())
-   updatedAt DateTime @updatedAt
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
+
+model User {
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
+  password    String
+  name        String?                // optional user name
+  isVerified  Boolean  @default(false) // for future email verification
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
