@@ -2,41 +2,77 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
+import prisma from "./src/config/db.js";
+
 import authRoutes from "./api/routes/auth.routes.js";
 import userRoutes from "./api/routes/user.routes.js";
-import prisma from './src/config/db.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-const whitelist = ['http://localhost:3000', process.env.FRONTEND_URL || 'http://192.168.1.10:3000'];
+// --- CORS SETUP ---
+const whitelist = [
+  "http://localhost:3000",
+  process.env.FRONTEND_URL, // your deployed frontend (Render/Vercel)
+];
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (whitelist.indexOf(origin) === -1) {
-      return callback(new Error('CORS policy does not allow this origin'), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, or Render health checks)
+      if (!origin || whitelist.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS policy does not allow access from origin ${origin}`));
+      }
+    },
+    credentials: true,
+  })
+);
 
+// --- SECURITY & PARSING ---
 app.use(helmet());
 app.use(express.json());
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
+// --- ROUTES ---
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
 
-// Test DB connection
-prisma.$connect()
-  .then(() => console.log('Successfully connected to PostgreSQL!'))
-  .catch(err => console.error('Database connection error:', err));
+// --- DATABASE CONNECTION ---
+async function connectDB() {
+  try {
+    await prisma.$connect();
+    console.log("✅ Successfully connected to PostgreSQL!");
+  } catch (err) {
+    console.error("❌ Database connection error:", err);
+  }
+}
 
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+connectDB();
+
+// --- ROOT ROUTE (TEST) ---
+app.get("/", (req, res) => {
+  res.send("🚀 Studio Perennis Backend is running successfully!");
 });
+
+// --- SERVER START ---
+const server = app.listen(PORT, () => {
+  console.log(`🌐 Backend running on port ${PORT}`);
+});
+
+// --- GRACEFUL SHUTDOWN ---
+process.on("SIGINT", async () => {
+  await prisma.$disconnect();
+  console.log("🧹 Database disconnected gracefully.");
+  server.close(() => process.exit(0));
+});
+
+process.on("SIGTERM", async () => {
+  await prisma.$disconnect();
+  console.log("🧹 Database disconnected gracefully (Render stop).");
+  server.close(() => process.exit(0));
+});
+
+export default app;
