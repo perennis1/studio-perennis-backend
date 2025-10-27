@@ -1,78 +1,63 @@
 import express from "express";
 import cors from "cors";
-import helmet from "helmet";
 import dotenv from "dotenv";
-import prisma from "./src/config/db.js";
-
-import authRoutes from "./api/routes/auth.routes.js";
-import userRoutes from "./api/routes/user.routes.js";
+import helmet from "helmet";
+import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { PrismaClient } from "@prisma/client";
 
 dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 5000;
+const prisma = new PrismaClient();
 
-// --- CORS SETUP ---
-const whitelist = [
-  "http://localhost:3000",
-  process.env.FRONTEND_URL, // your deployed frontend (Render/Vercel)
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, or Render health checks)
-      if (!origin || whitelist.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy does not allow access from origin ${origin}`));
-      }
-    },
-    credentials: true,
-  })
-);
-
-// --- SECURITY & PARSING ---
+// Middleware
+app.use(cors());
 app.use(helmet());
 app.use(express.json());
 
-// --- ROUTES ---
-app.use("/api/auth", authRoutes);
-app.use("/api/user", userRoutes);
-
-// --- DATABASE CONNECTION ---
-async function connectDB() {
-  try {
-    await prisma.$connect();
-    console.log("✅ Successfully connected to PostgreSQL!");
-  } catch (err) {
-    console.error("❌ Database connection error:", err);
-  }
-}
-
-connectDB();
-
-// --- ROOT ROUTE (TEST) ---
+// Root route (health check)
 app.get("/", (req, res) => {
-  res.send("🚀 Studio Perennis Backend is running successfully!");
+  res.send("Studio Perennis backend is live 🚀");
 });
 
-// --- SERVER START ---
-const server = app.listen(PORT, () => {
-  console.log(`🌐 Backend running on port ${PORT}`);
+// Example: Password reset email (using Gmail SMTP)
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const resetLink = `https://yourfrontenddomain.com/reset-password?token=${token}`;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL,
+      to: email,
+      subject: "Reset Your Password",
+      html: `<p>Click <a href="${resetLink}">here</a> to reset your password.</p>`,
+    });
+
+    res.status(200).json({ message: "Password reset email sent" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
-// --- GRACEFUL SHUTDOWN ---
-process.on("SIGINT", async () => {
-  await prisma.$disconnect();
-  console.log("🧹 Database disconnected gracefully.");
-  server.close(() => process.exit(0));
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
-
-process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
-  console.log("🧹 Database disconnected gracefully (Render stop).");
-  server.close(() => process.exit(0));
-});
-
-export default app;
