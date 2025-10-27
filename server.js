@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import helmet from "helmet";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import { PrismaClient } from "@prisma/client";
 
 dotenv.config();
